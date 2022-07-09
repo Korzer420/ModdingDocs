@@ -81,9 +81,54 @@ For more information about OnHooks please refer to the [OnHooks Page](Hooks/onho
 
 > Note: To be able to write OnHooks, you will need to import `MMHOOK_Assembly-CSharp.dll` and `MMHOOK_PlayMaker.dll` from your managed folder.
 ## IL Hooks
+While ModHooks allow you to intercept at certain points to modify some values and On Hooks allow you to modify what happens before and after a method is called, sometimes you'll need to modify existing code. That's what IL Hooks are for.
+
+IL (Intermediate language) is a programming language that functions as a "bridge" between our normal readable code and the code, that the machine can actually read and execute. Compiling a program will "translate" the code in IL and then, when needed in machine code.
+
+To make using this a bit more clearly we will look at an example. We'll try to modify the SetDarkness Methods, which checks at the start of the room if the player has the lantern. First we look at the original function:
+```cs
+public void SetDarkness(int darkness)
+{
+	if (darkness > 0 && this.playerData.GetBool("hasLantern"))
+	{
+		this.wieldingLantern = true;
+		return;
+	}
+	this.wieldingLantern = false;
+}
+```
+This method persist out of many instructions that the machine must execute. In dnSpy or IlSpy we can exactly see which il instructions will be taken:
+![IL_Example](https://user-images.githubusercontent.com/79503617/178123075-4231f65c-f791-47f6-b532-d734682e08c1.PNG)
+In the third column you can the operation code for the instructions. Here's a full list off the instructions: https://en.wikipedia.org/wiki/List_of_CIL_instructions
+This is all we needed to get started. First we create the hook for the method:
+```cs
+IL.HeroController.SetDarkness += MyILHook;
+```
+Now we will create the EventHandler:
+```cs
+private void MyILHook(MonoMod.Cil.ILContext il)
+{
+    ILCursor cursor = new ILCursor(il).Goto(0); // We need a cursor to navigate through the instructions (we do Goto() to jump to the first, just in case.);
+}
+```
+With this setup we want to find the instructions that we want to modify. We need to move the cursor to the instruction that is interesting for us. we use cursor.TryGotoNext() for that. This method return false if no matches was found:
+```cs
+private void MyILHook(MonoMod.Cil.ILContext il)
+{
+    ILCursor cursor = new ILCursor(il).Goto(0); // We need a cursor to navigate through the instructions (we do Goto() to jump to the first, just in case.);
+    if(cursor.TryGotoNext(
+        // This parameter determines that we want to execute our logic after the original (default is before)
+        MoveType.After,
+        // Now we can add a line of instructions that needs to be matched. For this we use x => x.Match{InstructionName}()
+        x => x.Matchfld<HeroController>("PlayerData")
+        x => x.Matchldstr("hasLantern"), // Looks for the instruction that handles a string named "hasLantern"
+    ))
+    {
+        // Modify stuff
+    }
+}
+```
 ### TODO IL Hooks
-- simple explanation of what they are and what is IL
-- when to use
 - link to IL hook page
 
 ### Todo General
